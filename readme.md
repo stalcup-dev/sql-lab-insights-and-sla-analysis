@@ -83,3 +83,127 @@ A production-style SQL analysis for a reference lab that:
 
 ```bash
 pip install -r requirements.txt
+Create DB + seed + views
+
+bash
+Copy code
+psql -U postgres -d Lab -f sql/01_schema.sql
+psql -U postgres -d Lab -f sql/02_seed_reference_lab.sql
+psql -U postgres -d Lab -f sql/03_views_sla.sql
+psql -U postgres -d Lab -f sql/04_calibrate_p95.sql
+Configure env (never commit secrets)
+
+bash
+Copy code
+# .env.example → copy to .env and set your values
+PG_HOST=localhost
+PG_PORT=5432
+PG_DB=Lab
+PG_USER=postgres
+PG_PASSWORD=changeme
+Run the notebook
+
+mathematica
+Copy code
+notebooks/01_SLA_Analyst_Report.ipynb → Run All
+Outputs render inline and save to visuals/.
+
+Project structure
+pgsql
+Copy code
+lab-sql/
+├─ README.md
+├─ requirements.txt
+├─ .gitignore
+├─ .env.example
+├─ notebooks/
+│  └─ 01_SLA_Analyst_Report.ipynb
+├─ sql/
+│  ├─ 01_schema.sql
+│  ├─ 02_seed_reference_lab.sql
+│  ├─ 03_views_sla.sql
+│  ├─ 04_calibrate_p95.sql
+│  └─ sla_by_analyte_shift.sql
+└─ visuals/
+   ├─ fig_sla_by_shift.png
+   ├─ fig_sla_by_site.png
+   ├─ fig_qc_fail_impact.png
+   ├─ fig_rolling_6hr.png
+   └─ fig_sla_heatmap.png
+SQL spotlight (core queries)
+<details> <summary><b>1) SLA by Shift (Result level)</b></summary>
+sql
+Copy code
+WITH m AS (
+  SELECT
+    CASE
+      WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 7 AND 14  THEN 'Day'
+      WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 15 AND 22 THEN 'Evening'
+      ELSE 'Night'
+    END AS shift,
+    EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts))/60 AS tat_min,
+    a.tat_target_minutes AS sla_min
+  FROM synth.results  r
+  JOIN synth.specimens s USING (specimen_id)
+  JOIN synth.analytes  a USING (analyte_code)
+)
+SELECT
+  shift,
+  ROUND(AVG(tat_min), 1)                           AS avg_tat_min,
+  ROUND(100.0 * AVG((tat_min <= sla_min)::int), 2) AS sla_hit_pct,
+  COUNT(*)                                         AS n
+FROM m
+GROUP BY shift
+ORDER BY sla_hit_pct DESC;
+</details> <details> <summary><b>2) QC-fail proximity impact</b></summary>
+sql
+Copy code
+WITH j AS (
+  SELECT a.bench,
+         EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts))/60 AS tat_min,
+         EXISTS (
+           SELECT 1
+           FROM synth.qc_events q
+           WHERE q.bench = a.bench
+             AND q.severity = 'fail'
+             AND q.event_ts BETWEEN r.verified_ts - INTERVAL '60 minutes' AND r.verified_ts
+         ) AS near_fail
+  FROM synth.results r
+  JOIN synth.specimens s USING (specimen_id)
+  JOIN synth.analytes  a USING (analyte_code)
+)
+SELECT near_fail, ROUND(AVG(tat_min),1) AS avg_tat, COUNT(*) AS n
+FROM j
+GROUP BY near_fail
+ORDER BY near_fail;
+</details> <details> <summary><b>3) Rolling 6-hour intake</b></summary>
+sql
+Copy code
+WITH timeline AS (
+  SELECT generate_series(
+           date_trunc('hour', MIN(received_ts)),
+           date_trunc('hour', MAX(received_ts)),
+           interval '1 hour') AS hr
+  FROM synth.specimens
+),
+counts AS (
+  SELECT t.hr, COUNT(*) AS received_count
+  FROM timeline t
+  JOIN synth.specimens s
+    ON s.received_ts >= t.hr AND s.received_ts < t.hr + interval '1 hour'
+  GROUP BY t.hr
+)
+SELECT hr,
+       received_count,
+       SUM(received_count) OVER (ORDER BY hr ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+         AS rolling_6hr_total
+FROM counts
+ORDER BY hr;
+</details>
+Tech: PostgreSQL (window functions, percentiles, time bucketing) • Python/Jupyter (Matplotlib) • Reproducible SQL views
+License: MIT
+Notes: Reseeding regenerates visuals; values may shift but insights/actions hold. All data are synthetic (no PHI).
+
+makefile
+Copy code
+::contentReference[oaicite:0]{index=0}
