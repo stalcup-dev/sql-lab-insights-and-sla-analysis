@@ -36,7 +36,7 @@ A production-style SQL analysis for a reference lab that:
 <td><img src="visuals/fig_rolling_6hr.png"   alt="Rolling 6-hr Intake" width="100%"/></td>
 </tr>
 <tr>
-<td colspan="2" align="center"><img src="visuals/fig_sla_heatmap.png" alt="SLA Heatmap by Analyte × Shift" width="85%"/></td>
+<td colspan="2" align="center"><img src="visuals/fig_sla_heatmap_analyte_shift.png" alt="SLA Heatmap by Analyte × Shift" width="85%"/></td>
 </tr>
 </table>
 
