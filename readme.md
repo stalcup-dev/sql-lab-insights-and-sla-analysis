@@ -111,6 +111,7 @@ ORDER BY sla_hit_pct DESC;
 ```
 <br> 
 
+<details> <summary><b>2) QC-Fail Proximity Impact</b> — <i>Does nearby QC failure inflate TAT?</i></summary> <br>
 -- Inputs : synth.results, synth.specimens, synth.analytes, synth.qc_events
 -- Outputs: near_fail (bool), avg_tat, n
 -- Window : 60 minutes before verification, same bench
