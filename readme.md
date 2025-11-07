@@ -109,6 +109,7 @@ FROM m
 GROUP BY shift
 ORDER BY sla_hit_pct DESC;
 ```
+<br> 
 
 -- Inputs : synth.results, synth.specimens, synth.analytes, synth.qc_events
 -- Outputs: near_fail (bool), avg_tat, n
