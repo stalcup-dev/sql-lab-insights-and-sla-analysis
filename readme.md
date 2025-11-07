@@ -83,7 +83,7 @@ A production-style SQL analysis for a reference lab that:
 <summary><b>1) SLA by Shift (result-level)</b> — <i>Which shift misses most often?</i></summary>
 <br>
 
-```sql
+sql
 -- Inputs : synth.results, synth.specimens, synth.analytes
 -- Outputs: shift, avg_tat_min, sla_hit_pct, n
 
