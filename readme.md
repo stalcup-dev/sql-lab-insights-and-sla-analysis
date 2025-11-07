@@ -110,6 +110,68 @@ GROUP BY shift
 ORDER BY sla_hit_pct DESC;
 ```
 
+-- Inputs : synth.results, synth.specimens, synth.analytes, synth.qc_events
+-- Outputs: near_fail (bool), avg_tat, n
+-- Window : 60 minutes before verification, same bench
+```sql
+WITH j AS (
+  SELECT
+      a.bench,
+      EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts)) / 60.0 AS tat_min,
+      EXISTS (
+        SELECT 1
+        FROM synth.qc_events q
+        WHERE q.bench    = a.bench
+          AND q.severity = 'fail'
+          AND q.event_ts BETWEEN r.verified_ts - INTERVAL '60 minutes'
+                             AND r.verified_ts
+      ) AS near_fail
+  FROM synth.results   r
+  JOIN synth.specimens s USING (specimen_id)
+  JOIN synth.analytes  a USING (analyte_code)
+)
+SELECT
+    near_fail,
+    ROUND(AVG(tat_min), 1) AS avg_tat,
+    COUNT(*)               AS n
+FROM j
+GROUP BY near_fail
+ORDER BY near_fail;
+```
+
+<details> <summary><b>3) Rolling 6-Hour Intake</b> — <i>Where are the arrival surges?</i></summary> <br>
+-- Inputs : synth.specimens
+-- Outputs: hr (hour bucket), received_count, rolling_6hr_total
+
+```sql
+WITH timeline AS (
+  SELECT generate_series(
+           date_trunc('hour', MIN(received_ts)),
+           date_trunc('hour', MAX(received_ts)),
+           INTERVAL '1 hour'
+         ) AS hr
+  FROM synth.specimens
+),
+counts AS (
+  SELECT
+      t.hr,
+      COUNT(*) AS received_count
+  FROM timeline t
+  JOIN synth.specimens s
+    ON s.received_ts >= t.hr
+   AND s.received_ts <  t.hr + INTERVAL '1 hour'
+  GROUP BY t.hr
+)
+SELECT
+    hr,
+    received_count,
+    SUM(received_count)
+      OVER (ORDER BY hr ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+      AS rolling_6hr_total
+FROM counts
+ORDER BY hr;
+```
+
 ---
 
 ## Run it
