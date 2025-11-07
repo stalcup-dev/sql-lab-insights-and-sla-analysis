@@ -83,7 +83,7 @@ A production-style SQL analysis for a reference lab that:
 <summary><b>1) SLA by Shift (result-level)</b> — <i>Which shift misses most often?</i></summary>
 <br>
 
-sql
+```sql
 -- Inputs : synth.results, synth.specimens, synth.analytes
 -- Outputs: shift, avg_tat_min, sla_hit_pct, n
 
@@ -93,23 +93,22 @@ WITH m AS (
         WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN  7 AND 14 THEN 'Day'
         WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 15 AND 22 THEN 'Evening'
         ELSE 'Night'
-      END                                             AS shift,
+      END AS shift,
       EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts)) / 60.0 AS tat_min,
-      a.tat_target_minutes                            AS sla_min
+      a.tat_target_minutes AS sla_min
   FROM synth.results   r
   JOIN synth.specimens s USING (specimen_id)
   JOIN synth.analytes  a USING (analyte_code)
 )
 SELECT
     shift,
-    ROUND(AVG(tat_min), 1)                             AS avg_tat_min,
-    ROUND(100.0 * AVG((tat_min <= sla_min)::int), 2)   AS sla_hit_pct,
-    COUNT(*)                                           AS n
+    ROUND(AVG(tat_min), 1)                           AS avg_tat_min,
+    ROUND(100.0 * AVG((tat_min <= sla_min)::int), 2) AS sla_hit_pct,
+    COUNT(*)                                         AS n
 FROM m
 GROUP BY shift
 ORDER BY sla_hit_pct DESC;
-Notes: adjust shift bands per policy. Helpful indexes:
-specimens(received_ts), results(verified_ts), FKs on specimen_id, analyte_code.
+Notes: adjust shift bands per policy. Helpful indexes: specimens(received_ts), results(verified_ts), FKs on specimen_id, analyte_code.
 
 </details>
 <details> <summary><b>2) QC-Fail Proximity Impact</b> — <i>Does nearby QC failure inflate TAT?</i></summary> <br>
@@ -142,8 +141,7 @@ SELECT
 FROM j
 GROUP BY near_fail
 ORDER BY near_fail;
-Notes: tune the proximity window as needed. Helpful index:
-qc_events(bench, event_ts, severity).
+Notes: tune the proximity window as needed. Helpful index: qc_events(bench, event_ts, severity).
 
 </details>
 <details> <summary><b>3) Rolling 6-Hour Intake</b> — <i>Where are the arrival surges?</i></summary> <br>
@@ -178,11 +176,9 @@ SELECT
       AS rolling_6hr_total
 FROM counts
 ORDER BY hr;
-Notes: great for staffing curves and courier timing. Helpful index:
-specimens(received_ts).
+Notes: great for staffing curves and courier timing. Helpful index: specimens(received_ts).
 
 </details> ```
-
 ---
 
 ## Run it
