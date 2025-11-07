@@ -78,101 +78,105 @@ A production-style SQL analysis for a reference lab that:
 ---
 
 SQL Spotlight — Core Queries
-
-Three production-grade patterns you can drop into psql or your IDE. They power the dashboards and the recommendations above.
-
 <details open> <summary><b>① SLA by Shift (result-level)</b> — <i>Which shift misses most often?</i></summary>
-
-Inputs: synth.results, synth.specimens, synth.analytes
-Outputs: shift, avg_tat_min, sla_hit_pct, n
-Frame: shift derived from received_ts hour
+-- Inputs : synth.results, synth.specimens, synth.analytes
+-- Outputs: shift, avg_tat_min, sla_hit_pct, n
 
 WITH m AS (
   SELECT
-    CASE
-      WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 7  AND 14 THEN 'Day'
-      WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 15 AND 22 THEN 'Evening'
-      ELSE 'Night'
-    END AS shift,
-    EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts))/60 AS tat_min,
-    a.tat_target_minutes AS sla_min
-  FROM synth.results  r
+      CASE
+        WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN  7 AND 14 THEN 'Day'
+        WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 15 AND 22 THEN 'Evening'
+        ELSE 'Night'
+      END                                         AS shift,
+      EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts)) / 60.0 AS tat_min,
+      a.tat_target_minutes                        AS sla_min
+  FROM synth.results   r
   JOIN synth.specimens s USING (specimen_id)
   JOIN synth.analytes  a USING (analyte_code)
 )
 SELECT
-  shift,
-  ROUND(AVG(tat_min), 1)                           AS avg_tat_min,
-  ROUND(100.0 * AVG((tat_min <= sla_min)::int), 2) AS sla_hit_pct,
-  COUNT(*)                                         AS n
+    shift,
+    ROUND(AVG(tat_min), 1)                           AS avg_tat_min,
+    ROUND(100.0 * AVG((tat_min <= sla_min)::int), 2) AS sla_hit_pct,
+    COUNT(*)                                         AS n
 FROM m
 GROUP BY shift
 ORDER BY sla_hit_pct DESC;
 
 
-Notes: Add/adjust shift bands per site policy. Helpful indexes: specimens(received_ts), results(verified_ts), FKs on specimen_id, analyte_code.
+Notes: adjust shift bands per policy. Helpful indexes:
+specimens(received_ts), results(verified_ts), FKs on specimen_id, analyte_code.
 
 </details>
 <details> <summary><b>② QC-Fail Proximity Impact</b> — <i>Does nearby QC failure inflate TAT?</i></summary>
-
-Inputs: synth.results, synth.specimens, synth.analytes, synth.qc_events
-Outputs: near_fail (bool), avg_tat, n
-Frame: QC window = 60 minutes before result verification on the same bench
+-- Inputs : synth.results, synth.specimens, synth.analytes, synth.qc_events
+-- Outputs: near_fail (bool), avg_tat, n
+-- Window : 60 minutes before verification, same bench
 
 WITH j AS (
-  SELECT a.bench,
-         EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts))/60 AS tat_min,
-         EXISTS (
-           SELECT 1
-           FROM synth.qc_events q
-           WHERE q.bench = a.bench
-             AND q.severity = 'fail'
-             AND q.event_ts BETWEEN r.verified_ts - INTERVAL '60 minutes' AND r.verified_ts
-         ) AS near_fail
-  FROM synth.results r
+  SELECT
+      a.bench,
+      EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts)) / 60.0 AS tat_min,
+      EXISTS (
+        SELECT 1
+        FROM synth.qc_events q
+        WHERE q.bench    = a.bench
+          AND q.severity = 'fail'
+          AND q.event_ts BETWEEN r.verified_ts - INTERVAL '60 minutes'
+                             AND r.verified_ts
+      ) AS near_fail
+  FROM synth.results   r
   JOIN synth.specimens s USING (specimen_id)
   JOIN synth.analytes  a USING (analyte_code)
 )
-SELECT near_fail, ROUND(AVG(tat_min), 1) AS avg_tat, COUNT(*) AS n
+SELECT
+    near_fail,
+    ROUND(AVG(tat_min), 1) AS avg_tat,
+    COUNT(*)               AS n
 FROM j
 GROUP BY near_fail
 ORDER BY near_fail;
 
 
-Notes: Tune the window (INTERVAL '60 minutes') to your QC policy. Helpful index: qc_events(bench, event_ts, severity).
+Notes: tune the proximity window as needed. Helpful index:
+qc_events(bench, event_ts, severity).
 
 </details>
 <details> <summary><b>③ Rolling 6-Hour Intake</b> — <i>Where are the arrival surges?</i></summary>
-
-Inputs: synth.specimens
-Outputs: hr (hour bucket), received_count, rolling_6hr_total
-Frame: ROWS BETWEEN 5 PRECEDING AND CURRENT ROW ⇒ 6 hours
+-- Inputs : synth.specimens
+-- Outputs: hr (hour bucket), received_count, rolling_6hr_total
 
 WITH timeline AS (
   SELECT generate_series(
            date_trunc('hour', MIN(received_ts)),
            date_trunc('hour', MAX(received_ts)),
-           interval '1 hour') AS hr
+           INTERVAL '1 hour'
+         ) AS hr
   FROM synth.specimens
 ),
 counts AS (
-  SELECT t.hr, COUNT(*) AS received_count
+  SELECT
+      t.hr,
+      COUNT(*) AS received_count
   FROM timeline t
   JOIN synth.specimens s
     ON s.received_ts >= t.hr
-   AND s.received_ts <  t.hr + interval '1 hour'
+   AND s.received_ts <  t.hr + INTERVAL '1 hour'
   GROUP BY t.hr
 )
 SELECT
-  hr,
-  received_count,
-  SUM(received_count)
-    OVER (ORDER BY hr ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) AS rolling_6hr_total
+    hr,
+    received_count,
+    SUM(received_count)
+      OVER (ORDER BY hr ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+      AS rolling_6hr_total
 FROM counts
 ORDER BY hr;
 
 
-Notes: Great for staffing curves and courier timing. Helpful index: specimens(received_ts).
+Notes: great for staffing curves and courier timing. Helpful index:
+specimens(received_ts).
 
 </details>
 
