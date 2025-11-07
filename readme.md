@@ -108,14 +108,16 @@ SELECT
 FROM m
 GROUP BY shift
 ORDER BY sla_hit_pct DESC;
-```
-<br> 
+Notes: adjust shift bands per policy. Helpful indexes: specimens(received_ts), results(verified_ts), FKs on specimen_id, analyte_code.
 
+</details>
 <details> <summary><b>2) QC-Fail Proximity Impact</b> — <i>Does nearby QC failure inflate TAT?</i></summary> <br>
+sql
+Copy code
 -- Inputs : synth.results, synth.specimens, synth.analytes, synth.qc_events
 -- Outputs: near_fail (bool), avg_tat, n
 -- Window : 60 minutes before verification, same bench
-```sql
+
 WITH j AS (
   SELECT
       a.bench,
@@ -139,13 +141,15 @@ SELECT
 FROM j
 GROUP BY near_fail
 ORDER BY near_fail;
-```
+Notes: tune the proximity window as needed. Helpful index: qc_events(bench, event_ts, severity).
 
+</details>
 <details> <summary><b>3) Rolling 6-Hour Intake</b> — <i>Where are the arrival surges?</i></summary> <br>
+sql
+Copy code
 -- Inputs : synth.specimens
 -- Outputs: hr (hour bucket), received_count, rolling_6hr_total
 
-```sql
 WITH timeline AS (
   SELECT generate_series(
            date_trunc('hour', MIN(received_ts)),
@@ -172,8 +176,11 @@ SELECT
       AS rolling_6hr_total
 FROM counts
 ORDER BY hr;
-```
+Notes: great for staffing curves and courier timing. Helpful index: specimens(received_ts).
 
+</details>
+
+```
 ---
 
 ## Run it
