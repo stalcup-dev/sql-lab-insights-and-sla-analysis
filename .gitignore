@@ -1,0 +1,19 @@
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Env / creds / OS cruft
+.env
+env/
+.DS_Store
+Thumbs.db
+.env.*
+!/.env.example
+
+# Data dumps if any
+*.csv
+*.parquet
+
+# IDE
+.vscode/

@@ -1,0 +1,4 @@
+psycopg2-binary
+pandas
+matplotlib
+python-dotenv
