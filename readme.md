@@ -183,7 +183,7 @@ Notes: great for staffing curves and courier timing. Helpful index: specimens(re
 
 </details>
 ```
-
+</details>
 ---
 
 ## Run it
