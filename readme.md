@@ -190,7 +190,7 @@ Notes: great for staffing curves and courier timing. Helpful index: specimens(re
 
 **Prereqs**: PostgreSQL, Python, Jupyter
 
-```bash
+bash
 pip install -r requirements.txt
 Create DB + seed + views
 
@@ -239,76 +239,10 @@ lab-sql/
    ├─ fig_qc_fail_impact.png
    ├─ fig_rolling_6hr.png
    └─ fig_sla_heatmap.png
-SQL spotlight (core queries)
-<details> <summary><b>1) SLA by Shift (Result level)</b></summary>
-sql
-Copy code
-WITH m AS (
-  SELECT
-    CASE
-      WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 7 AND 14  THEN 'Day'
-      WHEN EXTRACT(HOUR FROM s.received_ts) BETWEEN 15 AND 22 THEN 'Evening'
-      ELSE 'Night'
-    END AS shift,
-    EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts))/60 AS tat_min,
-    a.tat_target_minutes AS sla_min
-  FROM synth.results  r
-  JOIN synth.specimens s USING (specimen_id)
-  JOIN synth.analytes  a USING (analyte_code)
-)
-SELECT
-  shift,
-  ROUND(AVG(tat_min), 1)                           AS avg_tat_min,
-  ROUND(100.0 * AVG((tat_min <= sla_min)::int), 2) AS sla_hit_pct,
-  COUNT(*)                                         AS n
-FROM m
-GROUP BY shift
-ORDER BY sla_hit_pct DESC;
-</details> <details> <summary><b>2) QC-fail proximity impact</b></summary>
-sql
-Copy code
-WITH j AS (
-  SELECT a.bench,
-         EXTRACT(EPOCH FROM (r.verified_ts - s.received_ts))/60 AS tat_min,
-         EXISTS (
-           SELECT 1
-           FROM synth.qc_events q
-           WHERE q.bench = a.bench
-             AND q.severity = 'fail'
-             AND q.event_ts BETWEEN r.verified_ts - INTERVAL '60 minutes' AND r.verified_ts
-         ) AS near_fail
-  FROM synth.results r
-  JOIN synth.specimens s USING (specimen_id)
-  JOIN synth.analytes  a USING (analyte_code)
-)
-SELECT near_fail, ROUND(AVG(tat_min),1) AS avg_tat, COUNT(*) AS n
-FROM j
-GROUP BY near_fail
-ORDER BY near_fail;
-</details> <details> <summary><b>3) Rolling 6-hour intake</b></summary>
-sql
-Copy code
-WITH timeline AS (
-  SELECT generate_series(
-           date_trunc('hour', MIN(received_ts)),
-           date_trunc('hour', MAX(received_ts)),
-           interval '1 hour') AS hr
-  FROM synth.specimens
-),
-counts AS (
-  SELECT t.hr, COUNT(*) AS received_count
-  FROM timeline t
-  JOIN synth.specimens s
-    ON s.received_ts >= t.hr AND s.received_ts < t.hr + interval '1 hour'
-  GROUP BY t.hr
-)
-SELECT hr,
-       received_count,
-       SUM(received_count) OVER (ORDER BY hr ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
-         AS rolling_6hr_total
-FROM counts
-ORDER BY hr;
-</details>
+---
+Next Steps
+Generate live dashboard
+---
 Tech: PostgreSQL (window functions, percentiles, time bucketing) • Python/Jupyter (Matplotlib) • Reproducible SQL views
 License: MIT
 Notes: Reseeding regenerates visuals; values may shift but insights/actions hold. All data are synthetic (no PHI).
