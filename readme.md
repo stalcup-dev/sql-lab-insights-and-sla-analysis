@@ -190,7 +190,7 @@ Notes: great for staffing curves and courier timing. Helpful index: specimens(re
 
 **Prereqs**: PostgreSQL, Python, Jupyter
 
-bash
+```bash
 pip install -r requirements.txt
 Create DB + seed + views
 
@@ -249,4 +249,5 @@ Notes: Reseeding regenerates visuals; values may shift but insights/actions hold
 
 makefile
 Copy code
+```
 ::contentReference[oaicite:0]{index=0}
